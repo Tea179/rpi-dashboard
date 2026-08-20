@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPi Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A1712;
+    --surface:#102A1E;
+    --line:#24462F;
+    --copper:#C6813F;
+    --copper-dim:#7A5330;
+    --silk:#EDE8DA;
+    --muted:#7FA08C;
+    --signal-good:#4ED9A6;
+    --signal-warn:#E8A23D;
+    --signal-hot:#E2574C;
+    --font-mono:'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+    --font-sans:'IBM Plex Sans', -apple-system, sans-serif;
+  }
+
+  *{ box-sizing:border-box; }
+
+  body{
+    margin:0;
+    min-height:100vh;
+    background-color:var(--bg);
+    background-image: radial-gradient(circle at 1px 1px, rgba(198,129,63,0.08) 1px, transparent 0);
+    background-size:24px 24px;
+    font-family:var(--font-sans);
+    color:var(--silk);
+    padding:28px 20px 40px;
+  }
+
+  :focus-visible{ outline:2px solid var(--copper); outline-offset:2px; }
+
+  .board{ max-width:960px; margin:0 auto; }
+
+  .board__header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:12px;
+    margin-bottom:18px;
+  }
+
+  .status{ display:flex; align-items:center; gap:10px; }
+
+  .led{
+    width:8px; height:8px; border-radius:50%;
+    background:var(--muted);
+    flex-shrink:0;
+  }
+  .led--live{ background:var(--signal-good); }
+  .led--error{ background:var(--signal-hot); }
+  @media (prefers-reduced-motion:no-preference){
+    .led--live{ animation:pulse 2s ease-in-out infinite; }
+  }
+  @keyframes pulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(78,217,166,0.45); }
+    50%{ box-shadow:0 0 0 6px rgba(78,217,166,0); }
+  }
+
+  .board__title{
+    font-family:var(--font-mono);
+    font-weight:600;
+    font-size:14px;
+    letter-spacing:0.14em;
+    color:var(--silk);
+  }
+
+  .board__meta{
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--muted);
+    display:flex;
+    gap:8px;
+    align-items:center;
+  }
+  .board__meta .sep{ color:var(--copper-dim); }
+
+  .trace-divider{
+    height:1px;
+    background:repeating-linear-gradient(to right, var(--copper-dim) 0 6px, transparent 6px 12px);
+    opacity:0.6;
+    margin-bottom:22px;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));
+    gap:16px;
+  }
+
+  .card-frame{
+    --chamfer:14px;
+    background:var(--line);
+    padding:1.5px;
+    -webkit-clip-path:polygon(var(--chamfer) 0, calc(100% - var(--chamfer)) 0, 100% var(--chamfer), 100% calc(100% - var(--chamfer)), calc(100% - var(--chamfer)) 100%, var(--chamfer) 100%, 0 calc(100% - var(--chamfer)), 0 var(--chamfer));
+    clip-path:polygon(var(--chamfer) 0, calc(100% - var(--chamfer)) 0, 100% var(--chamfer), 100% calc(100% - var(--chamfer)), calc(100% - var(--chamfer)) 100%, var(--chamfer) 100%, 0 calc(100% - var(--chamfer)), 0 var(--chamfer));
+    filter:drop-shadow(0 4px 14px rgba(0,0,0,0.35));
+  }
+
+  .card{
+    --chamfer:14px;
+    background:var(--surface);
+    -webkit-clip-path:polygon(var(--chamfer) 0, calc(100% - var(--chamfer)) 0, 100% var(--chamfer), 100% calc(100% - var(--chamfer)), calc(100% - var(--chamfer)) 100%, var(--chamfer) 100%, 0 calc(100% - var(--chamfer)), 0 var(--chamfer));
+    clip-path:polygon(var(--chamfer) 0, calc(100% - var(--chamfer)) 0, 100% var(--chamfer), 100% calc(100% - var(--chamfer)), calc(100% - var(--chamfer)) 100%, var(--chamfer) 100%, 0 calc(100% - var(--chamfer)), 0 var(--chamfer));
+    padding:18px 20px 20px;
+    min-height:112px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+
+  .card__label{
+    font-family:var(--font-mono);
+    font-size:11px;
+    font-weight:500;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
+
+  .card__value{
+    font-family:var(--font-mono);
+    font-size:34px;
+    font-weight:600;
+    line-height:1;
+    color:var(--silk);
+    transition:color 0.3s ease;
+  }
+  .card__value--text{ font-size:25px; }
+
+  .card__unit{
+    font-size:15px;
+    font-weight:500;
+    color:var(--copper);
+    margin-left:4px;
+  }
+
+  .card__sub{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--muted);
+    margin-top:auto;
+  }
+
+  .card__bar{
+    height:4px;
+    background:var(--bg);
+    border-radius:2px;
+    overflow:hidden;
+  }
+  .card__bar-fill{
+    height:100%;
+    width:0%;
+    background:var(--copper);
+    border-radius:2px;
+    transition:width 0.4s ease;
+  }
+
+  #card-temp[data-status="normal"] .card__value{ color:var(--signal-good); }
+  #card-temp[data-status="warm"] .card__value{ color:var(--signal-warn); }
+  #card-temp[data-status="hot"] .card__value{ color:var(--signal-hot); }
+  #card-temp[data-status="unknown"] .card__value{ color:var(--muted); }
+
+  .board__footer{
+    margin-top:22px;
+    font-family:var(--font-mono);
+    font-size:10px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--muted);
+    text-align:center;
+  }
+
+  @media (max-width:480px){
+    body{ padding:20px 14px 32px; }
+    .card__value{ font-size:28px; }
+  }
+</style>
+</head>
+<body>
+  <div class="board">
+    <header class="board__header">
+      <div class="status">
+        <span class="led" id="led"></span>
+        <span class="board__title">RPI · DASHBOARD</span>
+      </div>
+      <div class="board__meta">
+        <span id="hostname">—</span>
+        <span class="sep">·</span>
+        <span id="clock">—</span>
+      </div>
+    </header>
+
+    <div class="trace-divider"></div>
+
+    <main class="grid">
+      <div class="card-frame">
+        <section class="card" id="card-temp" data-status="unknown">
+          <div class="card__label">Temperatura</div>
+          <div class="card__value"><span id="temp-value">--</span><span class="card__unit">°C</span></div>
+          <div class="card__sub" id="temp-sub">SoC</div>
+        </section>
+      </div>
+
+      <div class="card-frame">
+        <section class="card" id="card-cpu">
+          <div class="card__label">Obciążenie CPU</div>
+          <div class="card__value"><span id="cpu-value">--</span><span class="card__unit">%</span></div>
+          <div class="card__bar"><div class="card__bar-fill" id="cpu-bar"></div></div>
+          <div class="card__sub" id="cpu-sub">load avg —</div>
+        </section>
+      </div>
+
+      <div class="card-frame">
+        <section class="card" id="card-uptime">
+          <div class="card__label">Czas działania</div>
+          <div class="card__value card__value--text" id="uptime-value">--</div>
+          <div class="card__sub">od ostatniego rozruchu</div>
+        </section>
+      </div>
+
+      <div class="card-frame">
+        <section class="card" id="card-ram">
+          <div class="card__label">Wolna pamięć RAM</div>
+          <div class="card__value"><span id="ram-value">--</span><span class="card__unit" id="ram-unit">GB</span></div>
+          <div class="card__bar"><div class="card__bar-fill" id="ram-bar"></div></div>
+          <div class="card__sub" id="ram-sub">z — GB</div>
+        </section>
+      </div>
+
+      <div class="card-frame">
+        <section class="card" id="card-disk">
+          <div class="card__label">Wolna pamięć SD</div>
+          <div class="card__value"><span id="disk-value">--</span><span class="card__unit" id="disk-unit">GB</span></div>
+          <div class="card__bar"><div class="card__bar-fill" id="disk-bar"></div></div>
+          <div class="card__sub" id="disk-sub">z — GB</div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="board__footer">
+      <span id="footer-status">łączenie…</span>
+    </footer>
+  </div>
+
+<script>
+  const REFRESH_MS = 2000;
+  let failCount = 0;
+
+  function formatBytes(bytes){
+    const gb = bytes / (1024 ** 3);
+    if (gb >= 1) return { value: gb.toFixed(1), unit: 'GB' };
+    const mb = bytes / (1024 ** 2);
+    return { value: mb.toFixed(0), unit: 'MB' };
+  }
+
+  function tempStatus(temp){
+    if (temp === null || temp === undefined) return 'unknown';
+    if (temp >= 70) return 'hot';
+    if (temp >= 60) return 'warm';
+    return 'normal';
+  }
+
+  function render(data){
+    document.title = data.hostname + ' · dashboard';
+    document.getElementById('hostname').textContent = data.hostname;
+
+    const tempEl = document.getElementById('temp-value');
+    const tempCard = document.getElementById('card-temp');
+    if (data.temperature_c === null || data.temperature_c === undefined){
+      tempEl.textContent = '—';
+      document.getElementById('temp-sub').textContent = 'niedostępna';
+    } else {
+      tempEl.textContent = data.temperature_c.toFixed(1);
+      document.getElementById('temp-sub').textContent = 'SoC';
+    }
+    tempCard.dataset.status = tempStatus(data.temperature_c);
+
+    document.getElementById('cpu-value').textContent = Math.round(data.cpu_percent);
+    document.getElementById('cpu-bar').style.width = Math.min(data.cpu_percent, 100) + '%';
+    document.getElementById('cpu-sub').textContent = 'load avg ' + data.load_avg.join(' / ');
+
+    document.getElementById('uptime-value').textContent = data.uptime;
+
+    const ramFree = formatBytes(data.memory.free);
+    const ramTotal = formatBytes(data.memory.total);
+    document.getElementById('ram-value').textContent = ramFree.value;
+    document.getElementById('ram-unit').textContent = ramFree.unit;
+    document.getElementById('ram-bar').style.width = data.memory.percent_used + '%';
+    document.getElementById('ram-sub').textContent = 'z ' + ramTotal.value + ' ' + ramTotal.unit;
+
+    const diskFree = formatBytes(data.disk.free);
+    const diskTotal = formatBytes(data.disk.total);
+    document.getElementById('disk-value').textContent = diskFree.value;
+    document.getElementById('disk-unit').textContent = diskFree.unit;
+    document.getElementById('disk-bar').style.width = data.disk.percent_used + '%';
+    document.getElementById('disk-sub').textContent = 'z ' + diskTotal.value + ' ' + diskTotal.unit;
+  }
+
+  function setConnectionStatus(ok){
+    const led = document.getElementById('led');
+    const footer = document.getElementById('footer-status');
+    if (ok){
+      led.className = 'led led--live';
+      footer.textContent = 'połączono · odświeżanie co 2 s';
+    } else {
+      led.className = 'led led--error';
+      footer.textContent = failCount > 2 ? 'brak połączenia z serwerem' : 'ponawianie…';
+    }
+  }
+
+  async function refresh(){
+    try {
+      const res = await fetch('/api/stats');
+      if (!res.ok) throw new Error('bad response');
+      const data = await res.json();
+      render(data);
+      failCount = 0;
+      setConnectionStatus(true);
+    } catch (err) {
+      failCount++;
+      setConnectionStatus(false);
+    }
+  }
+
+  function updateClock(){
+    document.getElementById('clock').textContent = new Date().toLocaleTimeString('pl-PL');
+  }
+
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+  updateClock();
+  setInterval(updateClock, 1000);
+</script>
+</body>
+</html>
